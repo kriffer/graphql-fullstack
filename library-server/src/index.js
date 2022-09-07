@@ -1,4 +1,5 @@
 const { ApolloServer, gql } = require('apollo-server')
+const { v1: uuid } = require('uuid')
 
 let authors = [
   {
@@ -16,11 +17,11 @@ let authors = [
     id: "afa5b6f1-344d-11e9-a414-719c6709cf3e",
     born: 1821
   },
-  { 
+  {
     name: 'Joshua Kerievsky', // birthyear not known
     id: "afa5b6f2-344d-11e9-a414-719c6709cf3e",
   },
-  { 
+  {
     name: 'Sandi Metz', // birthyear not known
     id: "afa5b6f3-344d-11e9-a414-719c6709cf3e",
   },
@@ -68,7 +69,7 @@ let books = [
     author: 'Joshua Kerievsky',
     id: "afa5de01-344d-11e9-a414-719c6709cf3e",
     genres: ['refactoring', 'patterns']
-  },  
+  },
   {
     title: 'Practical Object-Oriented Design, An Agile Primer Using Ruby',
     published: 2012,
@@ -95,14 +96,16 @@ let books = [
 const typeDefs = gql`
 type Author {
   name: String!
-  born: Int! 
-  id: ID!
+  id:ID
+  born: Int 
+  bookCount:Int
+ 
 }
 
 type Book {
   title: String!
   published: Int!
-  author: Author! 
+  author: Author
   id: ID!
   genres: [String!]!
 }
@@ -111,30 +114,101 @@ type Book {
     authorCount: Int!
     bookCount: Int!
     allAuthors:[Author!]!
-    allBooks:[Book!]!
     findBook(title: String!): Book
+    allBooks(author:String, genre:String):[Book]
+ 
+  }
+
+  type Mutation {
+    addBook(
+      title: String!
+      author: String!
+      published: Int
+      genres: [String]
+    ): Book
+
+    editAuthor(name: String!, setBornTo: Int!): Author
   }
 `
 
 const resolvers = {
   Query: {
-    authorCount:()=>authors.length,
-    allAuthors: ()=> authors,
-    bookCount:()=>books.length,
-    allBooks:()=>books,
-    findBook:(root, args)=>{
-      books.find(b=> b.title === args.title)
-    }
-   
+    authorCount: () => authors.length,
+    allAuthors: () => authors,
+    bookCount: () => books.length,
+    allBooks: (root, args) => {
+      if (args) {
+
+        let result = books
+        if (args.author) {
+          result = books.filter(b => b.author === args.author)
+
+        }
+
+        if (args.genre) {
+          result = result.filter(b => b.genres.includes(args.genre))
+        }
+
+
+        return result
+      }
+      return books
+
+    },
+    findBook: (root, args) => books.find(b => b.title === args.title),
+
+
+
+
+
   },
-  Book:{
-    author:(root)=>{
+  Book: {
+    author: ({ author
+    }) => {
+
       return {
-        name: root.name,
-        born: root.born,
-        id:root.id
+
+        name: author,
+        born: authors.find(b => b.name === author) ? authors.find(b => b.name === author).born : null,
+        bookCount: books.filter(b => b.author === author).length
       }
     }
+
+  },
+
+  Author: {
+    bookCount: (root) => {
+      return books.filter(b => b.author === root.name).length
+    }
+  },
+
+  Mutation: {
+    addBook: (
+      root, args
+    ) => {
+
+      const book = { ...args, id: uuid() }
+      books = books.concat(book)
+
+      authors = authors.concat({ name: args.author })
+      return book
+    }
+    ,
+
+    editAuthor: (root, args) => {
+      const author = authors.find((p) => p.name === args.name)
+      console.log(author)
+      if (!author) {
+        return null
+      }
+
+      const updatedAuthor = { ...author, born: args.setBornTo }
+      authors = authors.map((p) => (p.name === args.name ? updatedAuthor : p))
+      console.log(updatedAuthor)
+      return updatedAuthor
+    },
+
+
   }
 }
 
